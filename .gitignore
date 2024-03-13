@@ -3,3 +3,5 @@
 *.log
 *.spec
 *.exe
+output
+.vscode
