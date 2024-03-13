@@ -1,1 +1,1 @@
-nuitka --standalone --onefile .\genstream.py
+nuitka --standalone --onefile .\stream.py
