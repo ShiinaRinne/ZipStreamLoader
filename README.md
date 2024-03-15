@@ -1,24 +1,20 @@
 # stream zip downloader
 
-Many times, we don't need all the content of the zip file, or the disk space is small and there is no remaining space to decompress after downloading the compressed file. 
-In this case, the streaming download and decompression feature will disrupt this process
+In many cases, we seek to quickly load the contents of zip files or face limited disk space after downloading compressed files, leaving no space for decompression. In thie case, streaming download and decompression significantly improve the user experience
 
-Although this repository is now ready for direct use (tested in Genshin Impact,~69.7G compressed files can be downloaded and decompressed through streaming, which takes about 22 minutes to complete), unexpected bugs may occur and it is not recommended to use it in a production environment. 
-If you have any suggestions or questions, please feel free to post an issue
+C++ and Python(Linux & Windows) version are available for download in the releases. 
+For other platforms, please build it yourself.
 
-In the future, this project may be rewritten using C++
+While this repository is now ready for direct use, unforeseen errors may occur, and its use in production environments is not recommended. 
+Currently, it has only been tested with Genshin Impact 4.5, where streaming download and decompression of about 70G of compressed files took about 22 minutes to complete.
+
+If you have any suggestions or issues, please feel free to post an issue.
 
 ## Usage
-```
-python stream.py
-```
-I have also provided a release version, which can be used directly without installing python
-
-
+Just download from [release](https://github.com/ShiinaRinne/stream_zip_downloader/releases).
 ### supprted parameters
 ```
-python stream.py -h
-usage: stream.py [-h] [--log-level {INFO,WARNING,ERROR,CRITICAL}] [--output-dir OUTPUT_DIR] [--urls URLS [URLS ...]]
+usage: stream [-h] [--log-level {INFO,WARNING,ERROR,CRITICAL}] [--output-dir OUTPUT_DIR] [--urls URLS [URLS ...]]
                  [--disable-crc32] [--preset {genshin}]
 
 Zip Stream Downloader
@@ -32,10 +28,10 @@ options:
   --urls URLS [URLS ...]
                         The list of URLs to download.
   --disable-crc32       Disables CRC32 check, off by default.
-  --preset {genshin}    Use a predefined download address. Currently supported presets include: 'genshin' - Zip packages for Genshin Impact updates. Leave blank to manually specify the download address.
+  --preset {genshin}    Use a predefined download address. Currently supported presets include: 'genshin' - Zip packages for Genshin Impact updates. Leave blank to manually specify the download address. (Python only)
 ```
 
 ### example
 ```
-python stream.py --log-level INFO --disable-crc32 --preset genshin
+stream --urls https://example.com/example.zip --log-level INFO 
 ```

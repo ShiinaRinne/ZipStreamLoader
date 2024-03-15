@@ -5,3 +5,10 @@
 *.exe
 output
 .vscode
+# Xmake cache
+.xmake/
+build/
+
+# MacOS Cache
+.DS_Store
+*.zip

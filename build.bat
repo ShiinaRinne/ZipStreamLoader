@@ -1,1 +1,0 @@
-nuitka --standalone --onefile .\stream.py
