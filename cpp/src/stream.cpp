@@ -28,16 +28,16 @@ T readFromByteArray(const std::byte* &ptr) {
 
 ZipHeader parseHeader(const std::byte* headerData) {
     ZipHeader header;
-    header.version =            readFromByteArray<std::uint16_t>(headerData);
-    header.flags =              readFromByteArray<std::uint16_t>(headerData);
-    header.compression =        readFromByteArray<std::uint16_t>(headerData);
-    header.mod_time =           readFromByteArray<std::uint16_t>(headerData);
-    header.mod_date =           readFromByteArray<std::uint16_t>(headerData);
-    header.crc32_expected =     readFromByteArray<std::uint32_t>(headerData);
-    header.compressed_size =    readFromByteArray<std::uint32_t>(headerData);
-    header.uncompressed_size =  readFromByteArray<std::uint32_t>(headerData);
-    header.file_name_length =   readFromByteArray<std::uint16_t>(headerData);
-    header.extra_field_length = readFromByteArray<std::uint16_t>(headerData);
+    header.version              = readFromByteArray<std::uint16_t>(headerData);
+    header.flags                = readFromByteArray<std::uint16_t>(headerData);
+    header.compression          = readFromByteArray<std::uint16_t>(headerData);
+    header.mod_time             = readFromByteArray<std::uint16_t>(headerData);
+    header.mod_date             = readFromByteArray<std::uint16_t>(headerData);
+    header.crc32_expected       = readFromByteArray<std::uint32_t>(headerData);
+    header.compressed_size      = readFromByteArray<std::uint32_t>(headerData);
+    header.uncompressed_size    = readFromByteArray<std::uint32_t>(headerData);
+    header.file_name_length     = readFromByteArray<std::uint16_t>(headerData);
+    header.extra_field_length   = readFromByteArray<std::uint16_t>(headerData);
     return header;
 }
 
@@ -60,12 +60,11 @@ public:
         if (currentUrlIndex >= urls.size()) {
             spdlog::info("Processing complete");
             exit(0);
-            return;
         }
-    
+
         auto url = urls[currentUrlIndex++];
         web::http::client::http_client client(utility::conversions::to_string_t(url));
-    
+
         client.request(web::http::methods::GET, U("/")).then([this, url](web::http::http_response response) {
             if (response.status_code() == web::http::status_codes::OK) {
                 this->currentResponse = response;
@@ -133,7 +132,6 @@ void decompressDeflate(const std::vector<std::byte>& compressedData, std::vector
     strm.avail_in = compressedData.size();
     strm.next_in = (Bytef*)compressedData.data();
     
-    // 初始化inflate, 处理原始Deflate 数据
     if (inflateInit2(&strm, -MAX_WBITS) != Z_OK) {
         throw std::runtime_error("inflateInit2 failed");
     }
@@ -206,7 +204,6 @@ void downloadAndDecompress(const std::vector<std::string>& zipList,const std::st
             spdlog::error("Error: Failed to read header data");
             break;
         }
-        // auto header = parseHeader(header_data);
         auto header = parseHeader(header_data->data());
         auto fileNameData = fetcher.read(header.file_name_length);
         auto fileName = convertGBKToUTF8(*fileNameData);
@@ -275,7 +272,7 @@ options:
     }
 
     
-    std::string    logLevel = getCmdOption(argv, argv + argc, "--log-level", "-l", "INFO");
+    std::string  logLevel = getCmdOption(argv, argv + argc, "--log-level", "-l", "INFO");
     if        (  logLevel == "INFO"     )   { spdlog::set_level(spdlog::level::info);} 
     else if   (  logLevel == "WARNING"  )   { spdlog::set_level(spdlog::level::warn);} 
     else if   (  logLevel == "ERROR"    )   { spdlog::set_level(spdlog::level::err);} 
@@ -299,7 +296,7 @@ options:
     try {
         downloadAndDecompress(urls, outputDir, disableCrc32);
     } catch (const std::exception& e) {
-        std::cerr << "errir: " << e.what() << std::endl;
+        std::cerr << "error: " << e.what() << std::endl;
     }
     
     return 0;
