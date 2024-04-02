@@ -1,9 +1,14 @@
-#include "spdlog/spdlog.h"
+#ifdef GBK
 #include <iconv.h>
+#endif
+
+#include "spdlog/spdlog.h"
 #include <cpprest/http_client.h>
 #include <cpprest/streams.h>
 #include <zlib.h>
 #include <filesystem>
+
+
 
 struct ZipHeader {
     std::uint16_t version;
@@ -99,8 +104,8 @@ private:
 };
 
 
-
-std::string convertGBKToUTF8(const std::vector<std::byte>& gbkData) {
+#ifdef GBK
+std::string convertBytesToString(const std::vector<std::byte>& gbkData) {
     size_t inBytes = gbkData.size();
     char* inputPtr = const_cast<char*>(reinterpret_cast<const char*>(gbkData.data()));
     
@@ -123,14 +128,26 @@ std::string convertGBKToUTF8(const std::vector<std::byte>& gbkData) {
     
     return std::string(utf8Data.data(), utf8Data.size() - outBytes);
 }
+#else
+std::string convertBytesToString(const std::vector<std::byte>& byteData) {
+    std::string str(byteData.size(), '\0');
+    for (size_t i = 0; i < byteData.size(); ++i) {
+        str[i] = static_cast<char>(byteData[i]);
+    }
+
+    return str;
+}
+#endif
+
+
 
 void decompressDeflate(const std::vector<std::byte>& compressedData, std::vector<std::byte>& decompressedData, uLongf decompressedSize) {
     z_stream strm = {};
     strm.zalloc = Z_NULL;
-    strm.zfree = Z_NULL;
+    strm.zfree  = Z_NULL;
     strm.opaque = Z_NULL;
     strm.avail_in = compressedData.size();
-    strm.next_in = (Bytef*)compressedData.data();
+    strm.next_in  = (Bytef*)compressedData.data();
     
     if (inflateInit2(&strm, -MAX_WBITS) != Z_OK) {
         throw std::runtime_error("inflateInit2 failed");
@@ -148,7 +165,6 @@ void decompressDeflate(const std::vector<std::byte>& compressedData, std::vector
 }
 
 void decompressData(const ZipHeader& header, const std::vector<std::byte>& compressedData, const std::string& outputFilePath) {
-    
     std::vector<std::byte> decompressedData(header.uncompressed_size);
     
     switch(header.compression) {
@@ -166,8 +182,7 @@ void decompressData(const ZipHeader& header, const std::vector<std::byte>& compr
     }
 
     if (header.crc32_expected != 0) {
-        uLong calculatedCrc = crc32(0L, Z_NULL, 0);
-        calculatedCrc = crc32(calculatedCrc, reinterpret_cast<const Bytef*>(decompressedData.data()), decompressedData.size());
+        uLong calculatedCrc = crc32(0L, reinterpret_cast<const Bytef*>(decompressedData.data()), decompressedData.size());
         if (calculatedCrc != header.crc32_expected) {
             throw std::runtime_error("CRC32 check failed");
         }
@@ -206,12 +221,9 @@ void downloadAndDecompress(const std::vector<std::string>& zipList,const std::st
         }
         auto header = parseHeader(header_data->data());
         auto fileNameData = fetcher.read(header.file_name_length);
-        auto fileName = convertGBKToUTF8(*fileNameData);
+        auto fileName = convertBytesToString(*fileNameData);
         auto crc = header.crc32_expected;
-        
-        auto extra_field = fetcher.read(header.extra_field_length);
-        
-        
+        auto extra_field  = fetcher.read(header.extra_field_length);
         auto compressData = fetcher.read(header.compressed_size);
         if (!compressData || compressData->size() != header.compressed_size) {
             spdlog::error("Error: Failed to read compressed data for file: {}", fileName);
@@ -273,11 +285,12 @@ options:
 
     
     std::string  logLevel = getCmdOption(argv, argv + argc, "--log-level", "-l", "INFO");
-    if        (  logLevel == "INFO"     )   { spdlog::set_level(spdlog::level::info);} 
-    else if   (  logLevel == "WARNING"  )   { spdlog::set_level(spdlog::level::warn);} 
-    else if   (  logLevel == "ERROR"    )   { spdlog::set_level(spdlog::level::err);} 
+    if        (  logLevel == "DEBUG"    )   { spdlog::set_level(spdlog::level::debug)   ;}
+    else if   (  logLevel == "INFO"     )   { spdlog::set_level(spdlog::level::info)    ;} 
+    else if   (  logLevel == "WARNING"  )   { spdlog::set_level(spdlog::level::warn)    ;} 
+    else if   (  logLevel == "ERROR"    )   { spdlog::set_level(spdlog::level::err)     ;} 
     else if   (  logLevel == "CRITICAL" )   { spdlog::set_level(spdlog::level::critical);} 
-    else                                    { spdlog::warn("Unknown log level: {}", logLevel);}
+    else                                    { spdlog::warn("Unknown log level: {}", logLevel) ;}
     
 
     bool disableCrc32       = cmdOptionExists(argv, argv + argc, "--disable-crc32");
@@ -290,6 +303,10 @@ options:
                 urls.push_back(argv[++i]);
             }
         }
+    }
+    if (urls.empty()) {
+        spdlog::error("No URLs provided");
+        return 1;
     }
 
 

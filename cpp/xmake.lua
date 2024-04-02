@@ -16,5 +16,6 @@ target("stream")
     
     if is_plat("windows") then
         add_packages("libiconv")
-        add_links("bcrypt", "winhttp") 
+        add_links("bcrypt", "winhttp")
+        add_defines("GBK")
     end
