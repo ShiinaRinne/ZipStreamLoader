@@ -64,7 +64,6 @@ async def unzip(compression: bytes, compressData: bytes, file_name: str, output_
         await f.write(decompressed_data)
         logger.info(f"{file_name} 解压完成")
         
-    if args.disable_crc32: return
     
     crc32_calculated = zlib.crc32(decompressed_data) & 0xffffffff
     if crc32_calculated == crc32_expected:
@@ -114,7 +113,6 @@ def parse_args():
     parser.add_argument("--log-level", default="INFO", choices=["INFO", "WARNING", "ERROR", "CRITICAL"], help="设置日志级别，默认为 INFO ")
     parser.add_argument("--output-dir", default="./output", help="设置下载目录，默认为./output")
     parser.add_argument("--urls", nargs='+', help="需要下载的链接列表。")
-    parser.add_argument("--disable-crc32", action='store_false', help="禁用CRC32校验, 默认关闭")
     
     presets = ['genshin']
     parser.add_argument("--preset", default=None, choices=presets,
@@ -143,7 +141,7 @@ if __name__ == "__main__":
     else:
         if args.urls is None:
             logger.error("需要指定下载地址")
-            exit(1)
+            sys.exit(1)
         urls = args.urls
         
     if not os.path.exists(args.output_dir):

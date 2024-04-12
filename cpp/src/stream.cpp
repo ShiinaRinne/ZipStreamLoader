@@ -2,12 +2,13 @@
 #include <iconv.h>
 #endif
 
-#include "spdlog/spdlog.h"
+#include <spdlog/spdlog.h>
 #include <cpprest/http_client.h>
 #include <cpprest/streams.h>
 #include <zlib.h>
 #include <filesystem>
-
+#include <optional>
+#include <atomic>
 
 
 struct ZipHeader {
@@ -31,7 +32,7 @@ T readFromByteArray(const std::byte* &ptr) {
     return value;
 }
 
-ZipHeader parseHeader(const std::byte* headerData) {
+[[nodiscard]] ZipHeader parseHeader(const std::byte* headerData) {
     ZipHeader header;
     header.version              = readFromByteArray<std::uint16_t>(headerData);
     header.flags                = readFromByteArray<std::uint16_t>(headerData);
@@ -46,18 +47,16 @@ ZipHeader parseHeader(const std::byte* headerData) {
     return header;
 }
 
-static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::vector<std::byte>* userp) {
-    auto realSize = size * nmemb;
-    const std::byte* start = static_cast<const std::byte*>(contents);
-    userp->insert(userp->end(), start, start + realSize);
-    return realSize;
-}
 
 class ZipContentFetcher {
 public:
     web::http::http_response currentResponse;
+    std::atomic<size_t> totalSize;
+    std::atomic<size_t> progress;
+    std::chrono::steady_clock::time_point startTime;
 
-    ZipContentFetcher(const std::vector<std::string>& urls) : urls(urls), currentUrlIndex(0) {
+    ZipContentFetcher(const std::vector<std::string>& urls) : urls(urls), currentUrlIndex(0), totalSize(0), progress(0) {
+        startTime = std::chrono::steady_clock::now();
         switchStream();
     }
 
@@ -67,13 +66,16 @@ public:
             exit(0);
         }
 
-        auto url = urls[currentUrlIndex++];
+        const auto url = urls[currentUrlIndex++];
         web::http::client::http_client client(utility::conversions::to_string_t(url));
 
-        client.request(web::http::methods::GET, U("/")).then([this, url](web::http::http_response response) {
+        client.request(web::http::methods::GET, U("/")).then([this, url](const web::http::http_response response) {
             if (response.status_code() == web::http::status_codes::OK) {
                 this->currentResponse = response;
+                totalSize = response.headers().content_length();
                 spdlog::info("Processing volume: {}", url);
+                progress = 0;
+                startTime = std::chrono::steady_clock::now();
             } else {
                 spdlog::info("Request failed with status code: {}", response.status_code());
                 switchStream();
@@ -81,31 +83,54 @@ public:
         }).wait();
     }
     
-    std::shared_ptr<std::vector<std::byte>> read(size_t length) {
-        auto data = std::make_shared<std::vector<std::byte>>(length);
-    
+    [[nodiscard]] const std::optional<std::vector<std::byte>> read(const size_t length) {
+        std::vector<std::byte> data(length);
         auto buf = currentResponse.body().streambuf();
-        auto bytesRead = buf.getn(reinterpret_cast<uint8_t*>(data->data()), length).get();
-    
-        data->resize(bytesRead);
-    
+        const auto bytesRead = buf.getn(reinterpret_cast<uint8_t*>(data.data()), length).get();
+        updateProgress(bytesRead);
+
         if (bytesRead < length) {
             switchStream();
             auto remainingData = read(length - bytesRead);
-            data->insert(data->end(), remainingData->begin(), remainingData->end());
+            if (!remainingData) {
+                return std::nullopt;
+            }
+            data.insert(data.end(), remainingData->begin(), remainingData->end());
         }
-    
+
+        data.resize(bytesRead);
         return data;
     }
 private:
     std::vector<std::string> urls;
     size_t currentUrlIndex;
-    
+
+    void updateProgress(const size_t bytesRead) noexcept {
+        progress += bytesRead;
+        displayProgress();
+    }
+
+    void displayProgress() noexcept {
+        auto now = std::chrono::steady_clock::now();
+        auto timeElapsed = std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
+        auto speed = timeElapsed > 0 ? (progress / 1024.0 / 1024.0) / timeElapsed : 0; // MB/s
+
+        int barWidth = 70;
+        float progressPercentage = totalSize > 0 ? (float)progress / totalSize : 0.0;
+        std::cout << "[";
+        int pos = barWidth * progressPercentage;
+        for (int i = 0; i < barWidth; ++i) {
+            if (i < pos) std::cout << "=";
+            else if (i == pos) std::cout << ">";
+            else std::cout << " ";
+        }
+        std::cout << "] " << std::setprecision(2) << int(progressPercentage * 100.0) << " % " << speed << " MB/s\r";
+        std::cout.flush();
+    }
 };
 
-
 #ifdef GBK
-std::string convertBytesToString(const std::vector<std::byte>& gbkData) {
+[[nodiscard]] std::string convertBytesToString(const std::vector<std::byte>& gbkData) {
     size_t inBytes = gbkData.size();
     char* inputPtr = const_cast<char*>(reinterpret_cast<const char*>(gbkData.data()));
     
@@ -113,12 +138,12 @@ std::string convertBytesToString(const std::vector<std::byte>& gbkData) {
     std::vector<char> utf8Data(outBytes);
     char* outputPtr = utf8Data.data();
     
-    iconv_t cd = iconv_open("UTF-8", "GBK");
+    const iconv_t cd = iconv_open("UTF-8", "GBK");
     if (cd == (iconv_t)-1) {
         throw std::runtime_error("Failed to open iconv");
     }
     
-    size_t result = iconv(cd, &inputPtr, &inBytes, &outputPtr, &outBytes);
+    const size_t result = iconv(cd, &inputPtr, &inBytes, &outputPtr, &outBytes);
     if (result == (size_t)-1) {
         iconv_close(cd);
         throw std::runtime_error("iconv conversion failed");
@@ -129,7 +154,7 @@ std::string convertBytesToString(const std::vector<std::byte>& gbkData) {
     return std::string(utf8Data.data(), utf8Data.size() - outBytes);
 }
 #else
-std::string convertBytesToString(const std::vector<std::byte>& byteData) {
+[[nodiscard]] std::string convertBytesToString(const std::vector<std::byte>& byteData) {
     std::string str(byteData.size(), '\0');
     for (size_t i = 0; i < byteData.size(); ++i) {
         str[i] = static_cast<char>(byteData[i]);
@@ -139,39 +164,35 @@ std::string convertBytesToString(const std::vector<std::byte>& byteData) {
 }
 #endif
 
-
-
-void decompressDeflate(const std::vector<std::byte>& compressedData, std::vector<std::byte>& decompressedData, uLongf decompressedSize) {
-    z_stream strm = {};
-    strm.zalloc = Z_NULL;
-    strm.zfree  = Z_NULL;
-    strm.opaque = Z_NULL;
+void decompressDeflate(const std::vector<std::byte>& compressedData, std::vector<std::byte>& decompressedData, const uLongf decompressedSize) {
+    z_stream strm{};
+    strm.next_in = (Bytef*)compressedData.data();
     strm.avail_in = compressedData.size();
-    strm.next_in  = (Bytef*)compressedData.data();
-    
-    if (inflateInit2(&strm, -MAX_WBITS) != Z_OK) {
+    strm.next_out = (Bytef*)decompressedData.data();
+    strm.avail_out = decompressedSize;
+
+    if (int ret = inflateInit2(&strm, -MAX_WBITS); ret != Z_OK) {
         throw std::runtime_error("inflateInit2 failed");
     }
-    
-    int ret;
-    strm.avail_out = decompressedSize;
-    strm.next_out = (Bytef*)decompressedData.data();
-    ret = inflate(&strm, Z_NO_FLUSH);
-    inflateEnd(&strm);
 
-    if (ret != Z_STREAM_END) {
+    auto inflater = std::unique_ptr<z_stream, decltype(&inflateEnd)>(&strm, &inflateEnd);
+
+    if (int ret = inflate(inflater.get(), Z_FINISH); ret != Z_STREAM_END) {
         throw std::runtime_error("inflate failed: " + std::to_string(ret));
     }
+
+    decompressedData.resize(inflater->total_out);
 }
 
 void decompressData(const ZipHeader& header, const std::vector<std::byte>& compressedData, const std::string& outputFilePath) {
     std::vector<std::byte> decompressedData(header.uncompressed_size);
     
     switch(header.compression) {
-        case 0: // No Compression (Stored)
+        case 0: { // No Compression (Stored)
             spdlog::debug("Decompressing: {}. Compression Type: {}", outputFilePath, "No Compression (Stored)");
             decompressedData = compressedData;
             break;
+        }
         case 8: { // Deflate
             spdlog::debug("Decompressing: {}. Compression type: {}", outputFilePath, "Deflate");
             decompressDeflate(compressedData, decompressedData, header.uncompressed_size);
@@ -182,7 +203,7 @@ void decompressData(const ZipHeader& header, const std::vector<std::byte>& compr
     }
 
     if (header.crc32_expected != 0) {
-        uLong calculatedCrc = crc32(0L, reinterpret_cast<const Bytef*>(decompressedData.data()), decompressedData.size());
+        const uLong calculatedCrc = crc32(0L, reinterpret_cast<const Bytef*>(decompressedData.data()), decompressedData.size());
         if (calculatedCrc != header.crc32_expected) {
             throw std::runtime_error("CRC32 check failed");
         }
@@ -194,7 +215,7 @@ void decompressData(const ZipHeader& header, const std::vector<std::byte>& compr
     }
 }
 
-void decompressTask(const ZipHeader& header, const std::vector<std::byte>& compressedData, const std::string& outputFilePath) {
+void decompressTask(const ZipHeader& header, const std::vector<std::byte>& compressedData, const std::string& outputFilePath) noexcept {
     try {
         decompressData(header, compressedData, outputFilePath);
     } catch (const std::exception& e) {
@@ -202,37 +223,35 @@ void decompressTask(const ZipHeader& header, const std::vector<std::byte>& compr
     }
 }
 
-
-void downloadAndDecompress(const std::vector<std::string>& zipList,const std::string& outpputDir, const bool& disableCrc32) {
+void downloadAndDecompress(const std::vector<std::string>& zipList, const std::string& outpputDir) {
     ZipContentFetcher fetcher(zipList);
     std::vector<std::jthread> threads;
     
     while (true) {
-        auto signature = fetcher.read(4);
+        const auto signature = fetcher.read(4);
         if (signature->empty() || signature->size() != 4|| memcmp(signature->data(), "PK\x01\x02", 4) == 0) {
             spdlog::info("Finished reading file");
             break;
         }
         
-        auto header_data = fetcher.read(26);
+        const auto header_data = fetcher.read(26);
         if (header_data->empty() || header_data->size() != 26) {
             spdlog::error("Error: Failed to read header data");
             break;
         }
-        auto header = parseHeader(header_data->data());
-        auto fileNameData = fetcher.read(header.file_name_length);
-        auto fileName = convertBytesToString(*fileNameData);
-        auto crc = header.crc32_expected;
-        auto extra_field  = fetcher.read(header.extra_field_length);
-        auto compressData = fetcher.read(header.compressed_size);
+
+        const ZipHeader header     = parseHeader(header_data->data());
+        const auto fileNameData    = fetcher.read(header.file_name_length);
+        const auto extra_field     = fetcher.read(header.extra_field_length);
+        const auto compressData    = fetcher.read(header.compressed_size);
+        const std::string fileName = convertBytesToString(*fileNameData);
+
         if (!compressData || compressData->size() != header.compressed_size) {
             spdlog::error("Error: Failed to read compressed data for file: {}", fileName);
             break;
         }
-        if(!std::filesystem::exists(outpputDir)) {
-            std::filesystem::create_directories(outpputDir);
-        }
-        std::filesystem::path outputPath = std::filesystem::path(outpputDir) / fileName;
+
+        const auto outputPath = std::filesystem::path(outpputDir) / fileName;
         if (fileName.back() == '/') {
             std::filesystem::create_directories(outputPath);
             continue;
@@ -244,25 +263,26 @@ void downloadAndDecompress(const std::vector<std::string>& zipList,const std::st
     }
 }
 
-std::string getCmdOption(char ** begin, char ** end, const std::string & longOption, const std::string & shortOption = "", const std::string & defaultValue = "") {
+[[nodiscard]] const std::string getCmdOption(const char** begin, const char** end, const std::string& longOption, const std::string& shortOption = "", const std::string& defaultValue = "") {
     auto itr = std::find_if(begin, end, [&](const char* arg) {
         return longOption == arg || (!shortOption.empty() && shortOption == arg);
     });
+
     if (itr != end && ++itr != end) {
         return *itr;
     }
+
     return defaultValue;
 }
 
-bool cmdOptionExists(char** begin, char** end, const std::string& longOption, const std::string& shortOption = "") {
+[[nodiscard]] bool cmdOptionExists(const char** begin, const char** end, const std::string& longOption, const std::string& shortOption = "") {
     return std::find_if(begin, end, [&](const char* arg) {
         return longOption == arg || (!shortOption.empty() && shortOption == arg);
     }) != end;
 }
 
 
-
-int main(int argc, char * argv[]) {
+int main(int argc, const char* argv[]) {
     bool showHelp = cmdOptionExists(argv, argv+argc, "--help", "-h");
     if(showHelp){
         std::cout << 
@@ -278,13 +298,11 @@ options:
                         Sets the download directory, default is `./output`.
   --urls URLS [URLS ...]
                         The list of URLs to download.
-  --disable-crc32       Disables CRC32 check, off by default.
 )" << std::endl;
         return 0;
     }
 
-    
-    std::string  logLevel = getCmdOption(argv, argv + argc, "--log-level", "-l", "INFO");
+    const auto   logLevel = getCmdOption(argv, argv + argc, "--log-level", "-l", "INFO");
     if        (  logLevel == "DEBUG"    )   { spdlog::set_level(spdlog::level::debug)   ;}
     else if   (  logLevel == "INFO"     )   { spdlog::set_level(spdlog::level::info)    ;} 
     else if   (  logLevel == "WARNING"  )   { spdlog::set_level(spdlog::level::warn)    ;} 
@@ -292,26 +310,29 @@ options:
     else if   (  logLevel == "CRITICAL" )   { spdlog::set_level(spdlog::level::critical);} 
     else                                    { spdlog::warn("Unknown log level: {}", logLevel) ;}
     
-
-    bool disableCrc32       = cmdOptionExists(argv, argv + argc, "--disable-crc32");
-    std::string outputDir   = getCmdOption(argv, argv + argc, "--output-dir", "-o", "./output/");
+    const std::string outputDir   = getCmdOption(argv, argv + argc, "--output-dir", "-o", "./output/");
+    
     std::vector<std::string> urls;
     for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
+        const std::string arg = argv[i];
         if (arg == "--urls" || arg == "-u") {
             while (i + 1 < argc && argv[i + 1][0] != '-') {
                 urls.push_back(argv[++i]);
             }
         }
     }
+
     if (urls.empty()) {
         spdlog::error("No URLs provided");
         return 1;
     }
 
+    if(!std::filesystem::exists(outputDir)) {
+        std::filesystem::create_directories(outputDir);
+    }
 
     try {
-        downloadAndDecompress(urls, outputDir, disableCrc32);
+        downloadAndDecompress(urls, outputDir);
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << std::endl;
     }
