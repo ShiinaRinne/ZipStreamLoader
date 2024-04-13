@@ -91,8 +91,8 @@ async def download(zip_list:List[str]):
         
         
         output_file_path = os.path.join(args.output_dir, file_name)
-        if file_name.endswith('/'):
-            os.makedirs(output_file_path, exist_ok=True)
+        if not os.path.exists(os.path.dirname(output_file_path)):
+            os.makedirs(os.path.dirname(output_file_path))
             continue
         
         await unzip(compression, compressData, file_name, output_file_path, crc32_expected)

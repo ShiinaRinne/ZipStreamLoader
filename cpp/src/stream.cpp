@@ -252,8 +252,8 @@ void downloadAndDecompress(const std::vector<std::string>& zipList, const std::s
         }
 
         const auto outputPath = std::filesystem::path(outpputDir) / fileName;
-        if (fileName.back() == '/') {
-            std::filesystem::create_directories(outputPath);
+        if (!std::filesystem::exists(outputPath.parent_path())) {
+            std::filesystem::create_directories(outputPath.parent_path());
             continue;
         }
         
