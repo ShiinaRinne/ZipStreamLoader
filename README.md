@@ -27,19 +27,21 @@ options:
                         Sets the download directory, default is `./output`.
   --urls URLS [URLS ...]
                         The list of URLs to download.
-  --preset {genshin}    Use a predefined download address. Currently supported presets include: 'genshin' - Zip packages for Genshin Impact updates. Leave blank to manually specify the download address. (Python only)
+  --preset {genshin,zzz,bh3,sr}
+                        Use a predefined download address. Leave blank to manually specify the download address. (Python only)
+  --type {major,patch}  Preset type, default is `major`. [More detail](https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getGamePackages?launcher_id=jGHBHlcOq1) (Python only)
 ```
 
 ### Example
 ```
-stream --urls https://foo.com/bar.zip --log-level INFO 
+stream.exe --preset zzz --output-dir F:\zzz
 ```
 
 
 ## Build
 ### C++
-1. Install [xmake](https://github.com/xmake-io/xmake?tab=readme-ov-file#installation) and [vcpkg](https://github.com/microsoft/vcpkg?tab=readme-ov-file#getting-started) first.
-2. Set `VCPKG_ROOT` to the path of vcpkg.
+1. Install [xmake](https://github.com/xmake-io/xmake?tab=readme-ov-file#installation) and [vcpkg](https://github.com/microsoft/vcpkg?tab=readme-ov-file#getting-started)
+2. Set `VCPKG_ROOT` to the path of vcpkg
 
 3. Ubuntu should install pkg-config first
     ```shell
@@ -53,7 +55,7 @@ stream --urls https://foo.com/bar.zip --log-level INFO
     ```
 
 ### Python
-1. Install nuikta first
+1. Install nuikta
     ```shell
     pip3 install nuitka
     ```

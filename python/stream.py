@@ -149,7 +149,6 @@ def parse_presets(game, download_type):
         'zzz':'x6znKlJ0xK'
     }
     data = requests.get(f"https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getGamePackages?game_ids[]={game_id[game]}&launcher_id=jGHBHlcOq1").json()
-    zip_list =  GamePackage(**data["data"]["game_packages"][0]).main.major.game_pkgs
     main = GamePackage(**data["data"]["game_packages"][0]).main
 
     try:
