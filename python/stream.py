@@ -1,7 +1,7 @@
 import requests
 import os
 import zlib
-from typing import List
+from typing import Any, List, Optional
 from loguru import logger
 import lzma
 import sys
@@ -10,6 +10,49 @@ import argparse
 import asyncio
 import aiofiles
 import struct
+from pydantic import BaseModel
+
+class GamePackage(BaseModel):
+    game: "Game"
+    pre_download: Optional["PreDownload"]
+    main: "Main"
+
+class Game(BaseModel):
+    biz: str
+    id: str
+
+class PreDownload(BaseModel):
+    major: "Major"
+    patches: List["Patch"]
+
+class Main(BaseModel):
+    major: "Major"
+    patches: List["Patch"]
+
+class Res(BaseModel):
+    version: str
+    game_pkgs: List["GamePkg"]
+    res_list_url: str
+    audio_pkgs: List["AudioPkg"]
+
+class Major(Res):
+    pass
+
+class Patch(Res):
+    pass
+
+class Pkg(BaseModel):
+    decompressed_size: str
+    md5: str
+    url: str
+    size: str
+
+class GamePkg(Pkg):
+    pass
+
+class AudioPkg(Pkg):
+    language: str
+
 
 class ZipContentFetcher:
     def __init__(self, urls):
@@ -96,16 +139,26 @@ async def download(zip_list:List[str]):
             continue
         
         await unzip(compression, compressData, file_name, output_file_path, crc32_expected)
-        
 
-def parse_presets(preset):
-    match preset:
-        case "genshin":
-            data = requests.get("https://sdk-static.mihoyo.com/hk4e_cn/mdk/launcher/api/resource?key=eYd89JmJ&launcher_id=18").json()
-            game_list = data["data"]["game"]["latest"]["segments"]
-            return [z["path"] for z in game_list]
-        case _:
-            return None
+
+def parse_presets(game, download_type):
+    game_id = {
+        'bh3':'osvnlOc0S8',
+        'genshin':'1Z8W5NHUQb',
+        'sr':'64kMb5iAWu',
+        'zzz':'x6znKlJ0xK'
+    }
+    data = requests.get(f"https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getGamePackages?game_ids[]={game_id[game]}&launcher_id=jGHBHlcOq1").json()
+    zip_list =  GamePackage(**data["data"]["game_packages"][0]).main.major.game_pkgs
+    main = GamePackage(**data["data"]["game_packages"][0]).main
+
+    try:
+        zip_list = main.major.game_pkgs if download_type == "major" else main.patches[0].game_pkgs # TODO: patch version
+    except IndexError:
+        logger.error("未找到指定类型的下载链接")
+        sys.exit(1)
+
+    return [pkg.url for pkg in zip_list]
       
 
 def parse_args():
@@ -114,20 +167,16 @@ def parse_args():
     parser.add_argument("--output-dir", default="./output", help="设置下载目录，默认为./output")
     parser.add_argument("--urls", nargs='+', help="需要下载的链接列表。")
     
-    presets = ['genshin']
-    parser.add_argument("--preset", default=None, choices=presets,
-                        help="使用预定义的下载地址。"
-                             "当前支持的预设包括: "
-                             "'genshin' - 原神更新时的zip包。"
-                             "留空则需手动指定下载地址。")
+    presets = ['genshin', 'zzz', 'bh3', 'sr']
+    download_type = ['major', 'patch']
+    parser.add_argument("--preset", default=None, choices=presets, help="使用预定义的下载地址。留空则需手动指定下载地址。")
+    parser.add_argument("--type", default="major", choices=download_type, help="下载类型，默认为major.")
 
     return parser.parse_args()
 
 
 logger.add("info.log", level='INFO', encoding='utf8')
 logger.add("error.log", level='WARNING', encoding='utf8')
-
-args = None
 
 if __name__ == "__main__":
     args = parse_args()
@@ -137,12 +186,16 @@ if __name__ == "__main__":
     logger.add("info.log", level=args.log_level.upper())
     
     if args.preset is not None:
-        urls:List[str] = parse_presets(args.preset)
+        urls:List[str] = parse_presets(args.preset, args.type)
     else:
         if args.urls is None:
             logger.error("需要指定下载地址")
             sys.exit(1)
         urls = args.urls
+
+    url_str = "\r\n".join(urls)
+    if input(f"{url_str} \r\n 以上为待下载列表，是否继续下载？(y/n): ") == 'n':
+        sys.exit(0)
         
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
