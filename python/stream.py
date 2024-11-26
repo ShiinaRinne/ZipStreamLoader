@@ -22,7 +22,7 @@ class Game(BaseModel):
     id: str
 
 class PreDownload(BaseModel):
-    major: "Major"
+    major: Optional["Major"]
     patches: List["Patch"]
 
 class Main(BaseModel):
