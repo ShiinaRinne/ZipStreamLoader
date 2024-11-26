@@ -1,58 +1,19 @@
+# -*- coding: utf-8 -*-
 import requests
 import os
 import zlib
-from typing import Any, List, Optional
-from loguru import logger
+from typing import List
+
 import lzma
 import sys
 import bz2
 import argparse
+
 import asyncio
 import aiofiles
 import struct
-from pydantic import BaseModel
 
-class GamePackage(BaseModel):
-    game: "Game"
-    pre_download: Optional["PreDownload"]
-    main: "Main"
-
-class Game(BaseModel):
-    biz: str
-    id: str
-
-class PreDownload(BaseModel):
-    major: Optional["Major"]
-    patches: List["Patch"]
-
-class Main(BaseModel):
-    major: "Major"
-    patches: List["Patch"]
-
-class Res(BaseModel):
-    version: str
-    game_pkgs: List["GamePkg"]
-    res_list_url: str
-    audio_pkgs: List["AudioPkg"]
-
-class Major(Res):
-    pass
-
-class Patch(Res):
-    pass
-
-class Pkg(BaseModel):
-    decompressed_size: str
-    md5: str
-    url: str
-    size: str
-
-class GamePkg(Pkg):
-    pass
-
-class AudioPkg(Pkg):
-    language: str
-
+from loguru import logger
 
 class ZipContentFetcher:
     def __init__(self, urls):
@@ -149,15 +110,16 @@ def parse_presets(game, download_type):
         'zzz':'x6znKlJ0xK'
     }
     data = requests.get(f"https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getGamePackages?game_ids[]={game_id[game]}&launcher_id=jGHBHlcOq1").json()
-    main = GamePackage(**data["data"]["game_packages"][0]).main
+
+    main = data["data"]["game_packages"][0]["main"]
 
     try:
-        zip_list = main.major.game_pkgs if download_type == "major" else main.patches[0].game_pkgs # TODO: patch version
+        zip_list = main["major"]["game_pkgs"] if download_type == "major" else main["patches"][0]["game_pkgs"] # TODO: patch version
     except IndexError:
         logger.error("未找到指定类型的下载链接")
         sys.exit(1)
 
-    return [pkg.url for pkg in zip_list]
+    return [pkg["url"] for pkg in zip_list]
       
 
 def parse_args():
