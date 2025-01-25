@@ -1,5 +1,7 @@
 add_rules("mode.debug", "mode.release")
+
 add_requires("zlib", "libcurl", "spdlog", "vcpkg::cpprestsdk", "openssl")
+
 if is_plat("windows") then
     add_requires("libiconv")
 end
@@ -17,4 +19,9 @@ target("stream")
         add_packages("libiconv")
         add_links("bcrypt", "winhttp")
         add_defines("GBK")
+    end
+
+    if is_plat("macosx") then
+        add_cxxflags("-fexperimental-library")       -- clang
+        add_frameworks("CoreFoundation", "Security") -- openssl
     end

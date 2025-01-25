@@ -40,12 +40,16 @@ stream.exe --preset zzz --output-dir F:\zzz
 
 ## Build
 ### C++
-1. Install [xmake](https://github.com/xmake-io/xmake?tab=readme-ov-file#installation) and [vcpkg](https://github.com/microsoft/vcpkg?tab=readme-ov-file#getting-started)
-2. Set `VCPKG_ROOT` to the path of vcpkg
+1. Install [xmake](https://github.com/xmake-io/xmake?tab=readme-ov-file#installation) and [vcpkg](https://github.com/microsoft/vcpkg?tab=readme-ov-file#getting-started)  
+   If you are using macOS, please install [XCode](https://apps.apple.com/us/app/xcode/id497799835)
+2. Set `VCPKG_ROOT` to the path of vcpkg  
 
-3. Ubuntu should install pkg-config first
+3. Install `pkg-config` (unix only)
     ```shell
+    # Ubuntu
     sudo apt install pkg-config
+    # macosx
+    brew install pkgconf
     ```
 4. Build
     ```shell
