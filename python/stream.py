@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-import requests
 import os
+import re
+import bz2
+import sys
+import lzma
 import zlib
+import struct
+import argparse
 from typing import List
 
-import lzma
-import sys
-import bz2
-import argparse
 
 import asyncio
 import aiofiles
-import struct
-
+import requests
 from loguru import logger
 
 class ZipContentFetcher:
@@ -51,7 +51,7 @@ class ZipContentFetcher:
 
 async def unzip(compression: bytes, compressData: bytes, file_name: str, output_file_path: str, crc32_expected: int):
     decompressed_data = b''
-    if compression == b'\x00\x00':  # No Compression (Stored)
+    if compression   == b'\x00\x00':  # No Compression (Stored)
         logger.info(f"正在解压: {file_name}, 格式: No Compression (Stored)")
         decompressed_data = compressData
     elif compression == b'\x08\x00':  # Deflate
@@ -128,7 +128,7 @@ def parse_args():
     parser.add_argument("--output-dir", default="./output", help="设置下载目录，默认为./output")
     parser.add_argument("--urls", nargs='+', help="需要下载的链接列表。")
     
-    presets = ['genshin', 'zzz', 'bh3', 'sr']
+    presets = ['genshin', 'zzz', 'bh3'] # , 'sr' 7z 暂不支持
     download_type = ['major', 'patch']
     parser.add_argument("--preset", default=None, choices=presets, help="使用预定义的下载地址。留空则需手动指定下载地址。")
     parser.add_argument("--type", default="major", choices=download_type, help="下载类型，默认为major.")
@@ -154,6 +154,11 @@ if __name__ == "__main__":
             sys.exit(1)
         urls = args.urls
 
+    for url in urls:
+        if url.endswith('.7z') or re.match(r'.+\.7z\.\d{3}',url):
+            logger.error("暂不支持7z格式")
+            sys.exit(1)
+    
     url_str = "\r\n".join(urls)
     if input(f"{url_str} \r\n 以上为待下载列表，是否继续下载？(y/n): ") == 'n':
         sys.exit(0)
