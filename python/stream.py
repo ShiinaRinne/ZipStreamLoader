@@ -151,8 +151,10 @@ if __name__ == "__main__":
     else:
         if args.urls is None:
             logger.error("需要指定下载地址")
-            sys.exit(1)
-        urls = args.urls
+            args.preset=input("请输入预设下载目标(genshin/zzz/bh3/sr): ")
+            urls:List[str] = parse_presets(args.preset, args.type)
+        else:
+            urls = args.urls
 
     url_str = "\r\n".join(urls)
     if input(f"{url_str} \r\n 以上为待下载列表，是否继续下载？(y/n): ") == 'n':
