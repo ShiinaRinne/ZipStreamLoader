@@ -1,0 +1,15 @@
+[project]
+name = "ZipStreamDownloader"
+version = "0.1.0"
+description = "Streaming download and decompression of zip files without additional space"
+authors = [
+    {name = "ShiinaRinne", email = "45081750+ShiinaRinne@users.noreply.github.com"},
+]
+requires-python = ">=3.12.*"
+readme = "README.md"
+license = {text = "MIT"}
+dependencies = ["requests>=2.32.3", "loguru>=0.7.3", "asyncio>=3.4.3", "aiofiles>=24.1.0", "nuitka>=2.6"]
+
+
+[tool.pdm]
+distribution = false

@@ -59,11 +59,9 @@ stream.exe --preset zzz --output-dir F:\zzz
     ```
 
 ### Python
-1. Install nuikta
-    ```shell
-    pip3 install nuitka
-    ```
-2. Linux should install patchelf first
+1. Install pdm  
+   https://pdm-project.org/zh-cn/latest/#_3
+2. Install patchelf(unix only)
     ```shell
     sudo apt install patchelf
     ```
@@ -71,5 +69,6 @@ stream.exe --preset zzz --output-dir F:\zzz
     ```shell
     git clone https://github.com/ShiinaRinne/ZipStreamLoader
     cd ZipStreamLoader/python
+    pdm install
     nuitka3 --standalone --onefile stream.py -o stream
     ```
